@@ -1,54 +1,47 @@
-#include "stm32f10x.h"
-
-u8 key_scan_flag = 0;
-extern struct KEYdataBase KeyData;
-
-
+#include "STM32Headfile.h"
+#include <key.h>
 
 int main(void)
 {
-    KEY_Init();
-    TIM4_KeyScan_Init(1000 - 1, 72 - 1); // 72MHZ/72=1MHZ 1ms时基
+	struct KEY_Monitoring_Data Key1;
+	KEY_Init(&Key1, GPIO_Pin_4, GPIOA, RCC_APB2Periph_GPIOA);
 
-    while (1)
-    {
-        if (key_scan_flag)
-        { // 50HZ
-            KEY_Scan();
-            if (KeyData.KEY1 == CLICKED) // 单击
-            {
-                LED = 0;
-                KeyData.KEY1 = NO_CLICKED;
-            }
-            else if (KeyData.KEY1 == DOUBLE_CLICKED) // 双击
-            {
-                LED = 1;
-                BEEP = 0;
-                KeyData.KEY1 = NO_CLICKED;
-            }
-            else if (KeyData.KEY1 == LONG_CLICKED)
-            { // 长按
-                BEEP = 1;
-                KeyData.KEY1 = NO_CLICKED;
-            }
-            else
-            {
-            }
-            key_scan_flag = 0;
-        }
-    }
+	static int BEEP = 0, LED = 0;
+
+	while (1)
+	{
+		if (KEY_Can_Scan())
+		{
+			// 50HZ
+			KEY_Scan(&Key1);
+			// 单击
+			if (Key1.state == CLICKED)
+			{
+				LED = 0;
+			}
+			// 双击
+			else if (Key1.state == DOUBLE_CLICKED)
+			{
+				LED = 1;
+				BEEP = 0;
+			}
+			// 长按
+			else if (Key1.state == LONG_CLICKED)
+			{
+				BEEP = 1;
+			}
+			else
+			{
+			}
+			KEY_CleanState(&Key1);
+			KEY_CleanScanFlag();
+		}
+	}
 }
 
 void TIM4_IRQHandler(void)
 {
-    TIM_ClearITPendingBit(TIM4, TIM_IT_Update);
+	TIM_ClearITPendingBit(TIM4, TIM_IT_Update);
 
-    static u8 counter1 = 0;
-
-    counter1++;
-    if (counter1 == 20) // 20ms
-    {
-        counter1 = 0;
-        key_scan_flag = 1;
-    }
+	KEY_Scan_TIMProcess();
 }
