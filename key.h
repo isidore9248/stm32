@@ -1,41 +1,43 @@
 #ifndef __KEY_H
 #define __KEY_H
 
-#include "stm32f10x.h"
-
-#define KEY1_PORT GPIOA
-#define KEY2_PORT GPIOA
-#define KEY1_PIN GPIO_Pin_4
-#define KEY2_PIN GPIO_Pin_5
-#define KEY1_SATE() GPIO_ReadInputDataBit(KEY1_PORT, KEY1_PIN)
-#define KEY2_SATE() GPIO_ReadInputDataBit(KEY2_PORT, KEY2_PIN)
+#include "STM32Headfile.h"
 
 enum KEY_STATE
 {
-    NO_CLICKED,
-    CLICKED,
-    DOUBLE_CLICKED,
-    LONG_CLICKED
+	NO_CLICKED     = 0,
+	CLICKED,
+	DOUBLE_CLICKED,
+	LONG_CLICKED,
 };
 
-struct KEYdataBase
+struct KEY_Monitoring_Data
 {
-    volatile enum KEY_STATE KEY1; 
-    volatile enum KEY_STATE KEY2; 
+	uint8_t Trg;
+	uint8_t Cont;
+	uint8_t num;
+	volatile enum KEY_STATE state;
+
+	uint16_t KEY_Pin;
+	GPIO_TypeDef* KEY_Port;
+	uint32_t KEY_Rcc;
+
+	uint8_t(*Read_KEY_State)(GPIO_TypeDef*, uint16_t);
 };
 
-struct KEYscanDataBase
-{
-    uint8_t KEY1_Trg;
-    uint8_t KEY1_Cont;
-    uint8_t KEY1_num;
+void KEY_Init(struct KEY_Monitoring_Data *Key,
+	uint16_t KEY_Pin_in,
+	GPIO_TypeDef* KEY_Port_in,
+	uint32_t KEY_Rcc_in);
 
-    uint8_t KEY2_Trg;
-    uint8_t KEY2_Cont;
-    uint8_t KEY2_num;
-};
+void KEY_Scan(struct KEY_Monitoring_Data *Key);
+enum KEY_STATE KEY_GetState(struct KEY_Monitoring_Data *Key);
 
-void KEY_Init(void);
-void KEY_Scan(void);
+void KEY_CleanState(struct KEY_Monitoring_Data *Key);
+
+bool KEY_Can_Scan(void);
+void KEY_CleanScanFlag(void);
+
+void KEY_Scan_TIMProcess(void);
 
 #endif
