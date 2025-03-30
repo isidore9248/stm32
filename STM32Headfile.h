@@ -26,6 +26,11 @@
 #include <stm32f10x_wwdg.h>
 #include <misc.h>
 
+//c--std
 #include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 //#endif // !1
