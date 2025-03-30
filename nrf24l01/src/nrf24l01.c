@@ -1,9 +1,15 @@
+#include "STM32Headfile.h"
 #include "nrf24l01.h"
 #include "nrf24l01_config.h"
 #include "Delay.h"
 
-static uint8_t T_ADDR[5] = { 0xF0, 0xF0, 0xF0, 0xF0, 0xF0 }; //本机地址
-static uint8_t R_ADDR[5] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }; //目标地址
+#define  ADDR_WIDTH		5
+#define  PAYLOAD_WIDTH  32
+
+static uint8_t T_ADDR[ADDR_WIDTH] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }; //本机地址
+static uint8_t R_ADDR[ADDR_WIDTH] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }; //目标地址
+
+static uint8_t NRF24L01_RecvBuf[32] = { 0 };
 
 /**
  * @brief 设置发送地址
@@ -12,12 +18,12 @@ static uint8_t R_ADDR[5] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }; //目标地址
  */
 void NRF24L01_Set_TxAddr(uint8_t *addr, uint8_t len)
 {
-	if (len > 5) len = 5; // 限制地址长度为5字节
+	if (len > ADDR_WIDTH) len = ADDR_WIDTH; // 限制地址长度为5字节
 	for (uint8_t i = 0; i < len; i++)
 	{
 		T_ADDR[i] = addr[i];
 	}
-	NRF24L01_W_Buf(W_REGISTER + TX_ADDR, T_ADDR, 5); // 更新发送地址
+	NRF24L01_W_Buf(W_REGISTER + TX_ADDR, T_ADDR, ADDR_WIDTH); // 更新发送地址
 }
 
 /**
@@ -27,12 +33,12 @@ void NRF24L01_Set_TxAddr(uint8_t *addr, uint8_t len)
  */
 void NRF24L01_Set_RxAddr(uint8_t *addr, uint8_t len)
 {
-	if (len > 5) len = 5; // 限制地址长度为5字节
+	if (len > ADDR_WIDTH) len = ADDR_WIDTH; // 限制地址长度为5字节
 	for (uint8_t i = 0; i < len; i++)
 	{
 		R_ADDR[i] = addr[i];
 	}
-	NRF24L01_W_Buf(W_REGISTER + RX_ADDR_P0, R_ADDR, 5); // 更新接收地址
+	NRF24L01_W_Buf(W_REGISTER + RX_ADDR_P0, R_ADDR, ADDR_WIDTH); // 更新接收地址
 }
 
 /**
@@ -216,12 +222,12 @@ void NRF24L01_Init(void)
 
 	NRF24L01_W_CE(0);
 
-	NRF24L01_W_Buf(W_REGISTER + TX_ADDR, T_ADDR, 5); // 配置发送地址
-	NRF24L01_W_Buf(W_REGISTER + RX_ADDR_P0, R_ADDR, 5); // 配置接收通道0
+	NRF24L01_W_Buf(W_REGISTER + TX_ADDR, T_ADDR, ADDR_WIDTH); // 配置发送地址
+	NRF24L01_W_Buf(W_REGISTER + RX_ADDR_P0, R_ADDR, ADDR_WIDTH); // 配置接收通道0
 	NRF24L01_W_Reg(W_REGISTER + CONFIG, 0x0F); // 配置成接收模式
 	NRF24L01_W_Reg(W_REGISTER + EN_AA, 0x01); // 通道0开启自动应答
 	NRF24L01_W_Reg(W_REGISTER + RF_CH, 0x00); // 配置通信频率2.4G
-	NRF24L01_W_Reg(W_REGISTER + RX_PW_P0, 32); // 配置接收通道0接收的数据宽度32字节
+	NRF24L01_W_Reg(W_REGISTER + RX_PW_P0, PAYLOAD_WIDTH); // 配置接收通道0接收的数据宽度32字节
 	NRF24L01_W_Reg(W_REGISTER + EN_RXADDR, 0x01); // 接收通道0使能
 	NRF24L01_W_Reg(W_REGISTER + SETUP_RETR, 0x1A); // 配置580us重发时间间隔,重发10次
 	NRF24L01_W_Reg(FLUSH_RX, NOP);
@@ -240,20 +246,37 @@ uint8_t NRF24L01_Check(void)
 }
 
 /**
- * @brief 接收数据
- * @param Buf 接收缓冲区
+ * @brief 将接收到的数据复制到目标命令值结构中。
+ * 
+ * @param Buf 接收到的数据缓冲区，包含要复制的数据。
+ * @param TargetValue 目标命令值结构的指针，用于存储复制的数据。
+ * 
+ * @note 该函数假定缓冲区 Buf 的长度至少为 7 字节（包含索引 1 到 6 的数据）。
+ *       数据从 Buf 的索引 1 开始复制到 TargetValue->NRF24L01_CmdValue 的索引 0 到 5。
  */
-void NRF24L01_Receive(uint8_t *Buf)
+void NRF24L01_CopyRecvToCmdValue(uint8_t *Buf, NRF24L01_Cmd *TargetValue)
+{
+	for (int i = 1; i <= 6; i++) { TargetValue->NRF24L01_CmdValue[i - 1] = Buf[i]; }
+}
+
+/**
+ * @brief 接收数据
+ * @param TargetValue 传入传出参数指向NRF24L01_Cmd结构体的指针，用于存储接收到的数据
+ */
+void NRF24L01_Receive(NRF24L01_Cmd *TargetValue)
 {
 	uint8_t Status;
 	Status = NRF24L01_R_Reg(R_REGISTER + STATUS);
 	if (Status & RX_OK)
 	{
-		NRF24L01_R_Buf(R_RX_PAYLOAD, Buf, 32);
+		memset(NRF24L01_RecvBuf, 0, PAYLOAD_WIDTH);
+
+		NRF24L01_R_Buf(R_RX_PAYLOAD, NRF24L01_RecvBuf, PAYLOAD_WIDTH);
 		NRF24L01_W_Reg(FLUSH_RX, NOP);
 		NRF24L01_W_Reg(W_REGISTER + STATUS, Status);
 		Delay_us(150);
 	}
+	NRF24L01_CopyRecvToCmdValue(NRF24L01_RecvBuf, TargetValue);
 }
 
 /**
@@ -265,7 +288,7 @@ void NRF24L01_Receive(uint8_t *Buf)
 uint8_t NRF24L01_Send(uint8_t *Buf)
 {
 	uint8_t Status;
-	NRF24L01_W_Buf(W_TX_PAYLOAD, Buf, 32); // 在发送数据缓存器发送要发送的数据
+	NRF24L01_W_Buf(W_TX_PAYLOAD, Buf, PAYLOAD_WIDTH); // 在发送数据缓存器发送要发送的数据
 
 	NRF24L01_W_CE(0);
 	NRF24L01_W_Reg(W_REGISTER + CONFIG, 0x0E);
@@ -289,4 +312,16 @@ uint8_t NRF24L01_Send(uint8_t *Buf)
 		NRF24L01_W_Reg(W_REGISTER + STATUS, Status); // 清除中断
 		return TX_OK;
 	}
+}
+
+/**
+ * @brief 初始化 NRF24L01_Cmd 结构体中的命令值数组。
+ * 
+ * 此函数将 NRF24L01_Cmd 结构体中的 NRF24L01_CmdValue 数组的所有元素初始化为 0。
+ * 
+ * @param Cmd 指向 NRF24L01_Cmd 结构体的指针。
+ */
+void NRF24L01_CmdValue_Init(NRF24L01_Cmd* Cmd)
+{
+	for (int i = 0; i < 6; i++) { Cmd->NRF24L01_CmdValue[i] = 0; }
 }
