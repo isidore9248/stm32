@@ -94,7 +94,8 @@ void send_test()
  */
 void rec_test()
 {
-	uint8_t Buf[6] = {0};
+	//*NRF24L01无线模块的每个数据包最大可以传输32字节的数据这是硬件限制
+	uint8_t Buf[32] = {0};
 
 	OLED_Init();
 
